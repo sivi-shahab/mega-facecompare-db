@@ -1,0 +1,13 @@
+# Overlay DEV — hanya compreface-postgres-db. Namespace compreface-dev (dibuat oleh mega-facecompare-deploy,
+# beserta NetworkPolicy default-deny + DNS egress). Ganti "registry.example.internal" dengan host registry internal.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: compreface-dev
+
+resources:
+  - ../../base
+
+images:
+  - name: mega/compreface-postgres-db
+    newName: registry.example.internal/mega/compreface-postgres-db
+    newTag: "1.2.0"

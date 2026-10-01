@@ -1,0 +1,87 @@
+# CI mega-facecompare-db — validate → build → scan → push  (image mega/compreface-postgres-db)
+#
+# Variabel CI/CD (Settings → CI/CD → Variables). JANGAN tulis nilai rahasia di file ini.
+#   REGISTRY            host registry internal, mis. registry.example.internal          (wajib untuk push)
+#   REGISTRY_USER       user registry                                                    (masked, protected)
+#   REGISTRY_PASSWORD   password/token registry                                          (masked, protected)
+#   TRIVY_IMAGE         image Trivy di registry internal (default aquasec/trivy:0.56.2)
+#   TRIVY_DB_REPOSITORY mirror DB vulnerability Trivy (air-gapped), mis. $REGISTRY/aquasec/trivy-db
+#   TRIVY_EXIT_CODE     0 = laporan saja (default), 1 = gagalkan pipeline bila ada temuan TRIVY_SEVERITY
+#
+# Runner: docker executor dengan socket Docker host (job build/scan/push memakai daemon yang sama,
+# sehingga image hasil build tersedia untuk scan & push tanpa registry perantara).
+
+stages: [validate, build, scan, push]
+
+variables:
+  IMAGE_NAMESPACE: mega
+  CI_DOCKER_IMAGE: docker:27-cli
+  CI_BASH_IMAGE: bash:5.2
+  KUBECTL_IMAGE: bitnami/kubectl:1.31
+  TRIVY_IMAGE: aquasec/trivy:0.56.2
+  TRIVY_SEVERITY: HIGH,CRITICAL
+  TRIVY_EXIT_CODE: "0"
+  DOCKER_HOST: unix:///var/run/docker.sock
+
+.docker:
+  image: $CI_DOCKER_IMAGE
+  before_script:
+    - apk add --no-cache bash git >/dev/null
+    - export VERSION="$(cat VERSION)"
+
+kustomize:
+  stage: validate
+  image:
+    name: $KUBECTL_IMAGE
+    entrypoint: [""]
+  script:
+    - kubectl kustomize k8s/overlays/dev > /dev/null
+    - kubectl kustomize k8s/overlays/prod > /dev/null
+
+build:
+  extends: .docker
+  stage: build
+  script:
+    - scripts/build.sh
+    - cp build/images.txt "build/images-${CI_JOB_ID}.txt"
+  artifacts:
+    paths: [build/]
+    expire_in: 1 week
+
+scan:
+  stage: scan
+  needs: [build]
+  image:
+    name: $TRIVY_IMAGE
+    entrypoint: [""]
+  script:
+    - |
+      for ref in $(cat build/images-*.txt | sort -u); do
+        trivy image --scanners vuln --severity "$TRIVY_SEVERITY" --exit-code "$TRIVY_EXIT_CODE" \
+          ${TRIVY_DB_REPOSITORY:+--db-repository "$TRIVY_DB_REPOSITORY"} \
+          --format table --output "build/trivy-$(echo "$ref" | tr '/:' '__').txt" "$ref"
+      done
+  artifacts:
+    paths: [build/trivy-*.txt]
+    expire_in: 4 weeks
+    when: always
+
+push:
+  extends: .docker
+  stage: push
+  needs: [build, scan]
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - test -n "$REGISTRY" || { echo "variabel CI REGISTRY belum diisi"; exit 1; }
+    - echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+    - |
+      for ref in $(cat build/images-*.txt | sort -u); do
+        docker tag "$ref" "${REGISTRY%/}/$ref"
+        echo "${REGISTRY%/}/$ref" >> build/push.txt
+      done
+    - scripts/push.sh $(cat build/push.txt)
+  artifacts:
+    paths: [build/digests.txt]
+    expire_in: 1 year

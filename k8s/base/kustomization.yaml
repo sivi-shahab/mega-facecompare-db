@@ -1,5 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+
+# Base manifest compreface-postgres-db (hanya service ini). Dipakai oleh overlays/dev & overlays/prod di repo ini,
+# dan disalin (vendored) ke mega-facecompare-deploy/k8s/services/compreface-postgres-db/ oleh scripts/sync-manifests.sh di sana.
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: compreface
+    includeSelectors: false
 resources:
   - statefulset.yaml
   - service.yaml
@@ -8,3 +15,7 @@ configMapGenerator:
   - name: compreface-postgres-db
     envs:
       - configmap.env
+
+images:
+  - name: mega/compreface-postgres-db
+    newTag: "1.2.0"

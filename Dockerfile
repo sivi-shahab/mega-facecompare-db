@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 #
 # compreface-postgres-db — PostgreSQL 11.5 + init script CompreFace.
-# Build context: root repo  (docker build -f services/compreface-postgres-db/Dockerfile .)
+# Build context: root repo ini  (docker build -t mega/compreface-postgres-db:<versi> .  — atau scripts/build.sh)
 #
 # Major version sengaja tetap 11 (sama dengan data live, lihat SPEC R-03). Single stage:
 # tidak ada artefak yang perlu di-compile, sehingga multi-stage tidak memberi manfaat.

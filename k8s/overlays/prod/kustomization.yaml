@@ -1,0 +1,17 @@
+# Overlay PROD — hanya compreface-postgres-db. Namespace compreface (dibuat oleh mega-facecompare-deploy).
+# Ganti "registry.example.internal" dengan host registry internal; untuk rilis, sebaiknya pin digest
+# (newTag → digest: sha256:...) dari build/digests.txt hasil scripts/push.sh.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: compreface
+
+resources:
+  - ../../base
+
+images:
+  - name: mega/compreface-postgres-db
+    newName: registry.example.internal/mega/compreface-postgres-db
+    newTag: "1.2.0"
+
+patches:
+  - path: patches/postgres-storage.yaml
